@@ -8,6 +8,7 @@ mod query;
 mod schema;
 mod schemabuilder;
 mod searcher;
+mod tokenizers;
 
 use document::Document;
 use facet::Facet;
