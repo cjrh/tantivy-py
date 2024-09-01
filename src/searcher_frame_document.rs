@@ -1,6 +1,6 @@
 #![allow(clippy::new_ret_no_self)]
 
-use std::collections::BTreeSet;
+use fnv::FnvHashSet;
 use std::iter::FromIterator;
 
 use crate::more_collectors::StatsCollector;
@@ -8,6 +8,8 @@ use crate::{document::Document, query::Query, to_pyerr};
 use pyo3::{exceptions::PyValueError, prelude::*};
 use tantivy as tv;
 use tantivy::collector::FilterCollector;
+use tantivy::Document as _;
+use tantivy::TantivyDocument;
 
 /// Tantivy's Searcher class
 ///
@@ -31,30 +33,33 @@ impl SearchResult {
     }
 
     #[getter]
-    fn unique_docs(&self, py: Python) -> PyResult<BTreeSet<u64>> {
-        let s =
-            BTreeSet::from_iter(self.hits.iter().map(|(d, f, s, score)| *d));
+    fn unique_docs(&self) -> PyResult<FnvHashSet<u64>> {
+        let s = FnvHashSet::from_iter(
+            self.hits.iter().map(|(d, _f, _s, _score)| *d),
+        );
         Ok(s)
     }
 
     #[getter]
-    fn unique_frames(&self, py: Python) -> PyResult<BTreeSet<u64>> {
-        let s =
-            BTreeSet::from_iter(self.hits.iter().map(|(d, f, s, score)| *f));
+    fn unique_frames(&self) -> PyResult<FnvHashSet<u64>> {
+        let s = FnvHashSet::from_iter(
+            self.hits.iter().map(|(_d, f, _s, _score)| *f),
+        );
         Ok(s)
     }
 
     #[getter]
-    fn unique_sentences(&self, py: Python) -> PyResult<BTreeSet<u64>> {
-        let s =
-            BTreeSet::from_iter(self.hits.iter().map(|(d, f, s, score)| *s));
+    fn unique_sentences(&self) -> PyResult<FnvHashSet<u64>> {
+        let s = FnvHashSet::from_iter(
+            self.hits.iter().map(|(_d, _f, s, _score)| *s),
+        );
         Ok(s)
     }
 
     #[getter]
-    fn unique_docs_frames(&self, py: Python) -> PyResult<BTreeSet<(u64, u64)>> {
-        let s = BTreeSet::from_iter(
-            self.hits.iter().map(|(d, f, s, score)| (*d, *f)),
+    fn unique_docs_frames(&self) -> PyResult<FnvHashSet<(u64, u64)>> {
+        let s = FnvHashSet::from_iter(
+            self.hits.iter().map(|(d, f, _s, _score)| (*d, *f)),
         );
         Ok(s)
     }
@@ -62,12 +67,9 @@ impl SearchResult {
     /// This is an optimization to allow Python callers to obtain vectors
     /// without having to do iteration to get them.
     #[getter]
-    fn unique_docs_frames_unzipped(
-        &self,
-        py: Python,
-    ) -> PyResult<(Vec<u64>, Vec<u64>)> {
-        let s = BTreeSet::from_iter(
-            self.hits.iter().map(|(d, f, s, score)| (*d, *f)),
+    fn unique_docs_frames_unzipped(&self) -> PyResult<(Vec<u64>, Vec<u64>)> {
+        let s = FnvHashSet::from_iter(
+            self.hits.iter().map(|(d, f, _s, _score)| (*d, *f)),
         );
         let mut v1 = Vec::with_capacity(s.len());
         let mut v2 = Vec::with_capacity(s.len());
@@ -83,10 +85,9 @@ impl SearchResult {
     #[getter]
     fn unique_docs_frames_sentences_unzipped(
         &self,
-        py: Python,
     ) -> PyResult<(Vec<u64>, Vec<u64>, Vec<u64>)> {
-        let s = BTreeSet::from_iter(
-            self.hits.iter().map(|(d, f, s, score)| (*d, *f, *s)),
+        let s = FnvHashSet::from_iter(
+            self.hits.iter().map(|(d, f, s, _score)| (*d, *f, *s)),
         );
         let mut v1 = Vec::with_capacity(s.len());
         let mut v2 = Vec::with_capacity(s.len());
@@ -120,7 +121,7 @@ impl StatSearcher {
         _py: Python,
         query: &Query,
         filter_fastfield_name: Option<String>,
-        filter_fastfield_values: Option<BTreeSet<u64>>,
+        filter_fastfield_values: Option<FnvHashSet<u64>>,
     ) -> PyResult<SearchResult> {
         if filter_fastfield_values.is_some() {
             if filter_fastfield_name.is_none() {
@@ -135,14 +136,10 @@ impl StatSearcher {
 
         let ret = if let Some(members) = filter_fastfield_values {
             let field_name = filter_fastfield_name.unwrap();
-            let field = self.inner.schema().get_field(&field_name).or({
-                let msg = format!("Field {field_name} not found");
-                Err(PyValueError::new_err(msg))
-            })?;
             self.inner.search(
                 query.get(),
                 &FilterCollector::new(
-                    field,
+                    field_name,
                     move |value: u64| members.contains(&value),
                     sc,
                 ),
@@ -179,9 +176,10 @@ impl StatSearcher {
     ///
     /// Returns the Document, raises ValueError if the document can't be found.
     fn doc(&self, doc_address: &DocAddress) -> PyResult<Document> {
-        let doc = self.inner.doc(doc_address.into()).map_err(to_pyerr)?;
-        let named_doc = self.inner.schema().to_named_doc(&doc);
-        Ok(Document {
+        let doc: TantivyDocument =
+            self.inner.doc(doc_address.into()).map_err(to_pyerr)?;
+        let named_doc = doc.to_named_doc(self.inner.schema());
+        Ok(crate::document::Document {
             field_values: named_doc.0,
         })
     }
