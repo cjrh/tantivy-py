@@ -2,8 +2,6 @@
 
 use std::collections::HashMap;
 
-use pyo3::{exceptions, prelude::*, types::PyAny};
-
 use pyo3::{
     exceptions,
     prelude::*,
