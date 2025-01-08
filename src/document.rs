@@ -7,7 +7,7 @@ use pyo3::{
     prelude::*,
     types::{
         PyAny, PyBool, PyDateAccess, PyDateTime, PyDict, PyInt, PyList,
-        PyTimeAccess, PyTuple,
+        PyTimeAccess, PyTuple, PyNotImplemented
     },
     Python,
 };
@@ -807,22 +807,37 @@ impl Document {
         self.clone()
     }
 
-    fn __richcmp__(
+    fn __richcmp__<'py>(
         &self,
         other: &Self,
         op: CompareOp,
-        py: Python<'_>,
-    ) -> PyObject {
+        py: Python<'py>
+    ) -> PyResult<Bound<'py, PyAny>> {
+        println!("\n\n\nComparing:\n\n{:?}\n\n{:?}", self.field_values, other.field_values);
         match op {
-            CompareOp::Eq => (self == other).into_py(py),
-            CompareOp::Ne => (self != other).into_py(py),
-            _ => py.NotImplemented(),
+            CompareOp::Eq => {
+                let v = (self == other).into_pyobject(py)?.to_owned().into_any();
+                Ok(v)
+            },
+            CompareOp::Ne => {
+                let v = (self != other).into_pyobject(py)?.to_owned().into_any();
+                Ok(v)
+            },
+            _ => {
+                let v = PyNotImplemented::get(py).to_owned().into_any();
+                Ok(v)
+            }
         }
     }
 
     #[staticmethod]
     fn _internal_from_pythonized(serialized: &Bound<PyAny>) -> PyResult<Self> {
-        pythonize::depythonize_bound(serialized.clone()).map_err(to_pyerr)
+        println!("\n\n\nDeserializing: {:?}", serialized);
+        let out = pythonize::depythonize(serialized).map_err(to_pyerr);
+        let out: Document = out.unwrap();
+        println!("\n\n\nDeserialized: {:?}", out);
+        println!("\n\n\nDeserialized: {:?}", out.field_values);
+        Ok(out)
     }
 
     fn __reduce__<'a>(
@@ -830,14 +845,18 @@ impl Document {
         py: Python<'a>,
     ) -> PyResult<Bound<'a, PyTuple>> {
         let serialized = pythonize::pythonize(py, &*slf).map_err(to_pyerr)?;
+        let reconstruction_callable = slf
+            .into_pyobject(py)?
+            .getattr("_internal_from_pythonized")?;
 
-        Ok(PyTuple::new_bound(
+        let args = PyTuple::new(py, [serialized])?;
+        PyTuple::new(
             py,
             [
-                slf.into_py(py).getattr(py, "_internal_from_pythonized")?,
-                PyTuple::new_bound(py, [serialized]).to_object(py),
-            ],
-        ))
+                reconstruction_callable,
+                args.into_any(),
+            ]
+        )
     }
 }
 
