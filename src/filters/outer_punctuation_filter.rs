@@ -54,6 +54,22 @@ impl<T: Tokenizer> Tokenizer for OuterPunctuationFilterWrapper<T> {
     }
 }
 
+fn is_disallowed_category(c: &char) -> bool {
+    let category = c.general_category_group();
+    // The only categories allowed through are:
+    // GeneralCategoryGroup::Letter
+    // GeneralCategoryGroup::Number
+    // GeneralCategoryGroup::Symbol (includes emoji)
+
+    match category {
+        GeneralCategoryGroup::Mark => true,
+        GeneralCategoryGroup::Punctuation=> true,
+        GeneralCategoryGroup::Separator => true,
+        GeneralCategoryGroup::Other => true,
+        _ => false,
+    }
+}
+
 pub struct OuterPunctuationFilterTokenStream<T> {
     leading_allow: Vec<char>,
     // buffer acts as temporary string memory to switch out token text.
@@ -69,19 +85,13 @@ impl<T: TokenStream> TokenStream for OuterPunctuationFilterTokenStream<T> {
 
             // Strip leading punctuation
             let token_text = token_text.trim_start_matches(|c: char| {
-                (c.is_ascii_punctuation()
-                    || c.general_category_group()
-                        == GeneralCategoryGroup::Punctuation)
+                (c.is_ascii_punctuation() || is_disallowed_category(&c))
                     && !self.leading_allow.contains(&c)
-                // !c.is_alphanumeric() && !is_emoji(c)
             });
 
             // Strip trailing punctuation
             let token_text = token_text.trim_end_matches(|c: char| {
-                c.is_ascii_punctuation()
-                    || c.general_category_group()
-                        == GeneralCategoryGroup::Punctuation
-                // !c.is_alphanumeric() && !is_emoji(c)
+                c.is_ascii_punctuation() || is_disallowed_category(&c)
             });
 
             self.buffer.clear();
@@ -137,6 +147,7 @@ pub mod tests {
     #[test]
     fn test_to_outer_punctuation_filter() {
         let tokens = token_stream_helper("Tree**%^");
+        println!("tokens {:?}", tokens);
         assert_eq!(tokens.len(), 1);
         assert_token(&tokens[0], 0, "Tree", 0, 8);
 
