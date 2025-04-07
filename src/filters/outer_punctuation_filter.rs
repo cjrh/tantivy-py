@@ -63,7 +63,7 @@ fn is_disallowed_category(c: &char) -> bool {
 
     match category {
         GeneralCategoryGroup::Mark => true,
-        GeneralCategoryGroup::Punctuation=> true,
+        GeneralCategoryGroup::Punctuation => true,
         GeneralCategoryGroup::Separator => true,
         GeneralCategoryGroup::Other => true,
         _ => false,
