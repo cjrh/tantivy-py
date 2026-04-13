@@ -1,6 +1,6 @@
 [package]
 name = "tantivy"
-version = "0.25.1"
+version = "0.26.0"
 readme = "README.md"
 authors = ["Damir Jelić <poljar@termina.org.uk>"]
 edition = "2021"
@@ -11,13 +11,13 @@ name = "tantivy"
 crate-type = ["cdylib"]
 
 [build-dependencies]
-pyo3-build-config = "0.28.2"
+pyo3-build-config = "0.28.3"
 
 [dependencies]
 base64 = "0.22"
 chrono = "0.4.44"
-tantivy = "0.25.0"
-tantivy-tokenizers = { git = "https://github.com/Kapiche/tantivy-tokenizers", tag = "v0.2.0" }
+tantivy = "0.26.0"
+tantivy-tokenizers = { git = "https://github.com/Kapiche/tantivy-tokenizers", tag = "v0.26.0" }
 itertools = "0.14.0"
 futures = "0.3.32"
 pythonize = "0.26.0"
@@ -28,3 +28,9 @@ fnv = "1.0.7"
 [dependencies.pyo3]
 version = "0.26.0"
 features = ["chrono", "extension-module"]
+
+# Override tantivy's `tantivy-query-grammar` with our vendored copy, which
+# patches an exponential-backtracking bug in the top-level `ast()` parser.
+# See ./tantivy-query-grammar/src/query_grammar.rs for the patch.
+[patch.crates-io]
+tantivy-query-grammar = { path = "tantivy-query-grammar" }
